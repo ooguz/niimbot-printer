@@ -55,6 +55,7 @@ class AppSettings:
     label_height_px: int = 240
     density: int = 3
     label_type: int = 1
+    label_copies: int = 1
     logging_enabled: bool = True
     debug_serial: bool = False
     pretix_enabled: bool = False
@@ -64,6 +65,7 @@ class AppSettings:
     pretix_event_slug: str = ""
     pretix_checkin_list_ids: list[int] = field(default_factory=list)
     pretix_badge_template: str = "{attendee_name}"
+    pretix_verify_before_print: bool = False
 
     def effective_font_path(self) -> str | None:
         if self.font_path.strip():
@@ -86,6 +88,10 @@ class AppSettings:
 
     def pretix_lists(self) -> list[int]:
         return list(self.pretix_checkin_list_ids)
+
+    def effective_label_copies(self) -> int:
+        n = int(self.label_copies)
+        return max(1, min(99, n))
 
 
 @dataclass
@@ -130,6 +136,12 @@ def _settings_from_dict(data: dict[str, Any]) -> AppSettings:
             continue
         if key == "pretix_checkin_list_ids":
             setattr(base, key, _coerce_checkin_list_ids(value))
+        elif key == "label_copies":
+            try:
+                n = int(value)
+                setattr(base, key, max(1, min(99, n)))
+            except (TypeError, ValueError):
+                setattr(base, key, 1)
         else:
             setattr(base, key, value)
     return base

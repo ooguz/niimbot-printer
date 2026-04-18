@@ -51,7 +51,7 @@ You can override it in **Settings** with any TTF/OTF path.
 Each line is one JSON object, for example:
 
 ```json
-{"ts":"2026-04-18T14:30:00Z","name":"Ada Lovelace","seq":12,"source":"manual","pretix_event_slug":null,"pretix_order_code":null,"pretix_position_id":null}
+{"ts":"2026-04-18T14:30:00Z","name":"Ada Lovelace","seq":12,"source":"manual","pretix_event_slug":null,"pretix_order_code":null,"pretix_position_id":null,"label_copies":2}
 ```
 
 The `name` field holds the printed text line. Logging is **on by default**; disable it in **File → Settings** if you do not want content written to disk.
@@ -71,6 +71,7 @@ The app can call your [Pretix](https://pretix.eu) instance’s [check-in redeem 
    - **Event slug** — used only by **Load lists** to query [check-in lists](https://docs.pretix.eu/en/latest/api/resources/checkinlists.html).
    - **Check-in list ID(s)** — comma-separated integers for the list(s) you scan against (use **Load lists** or copy IDs from Pretix admin).
    - **Badge text template** — Python `str.format` placeholders: `{attendee_name}`, `{company}`, `{order}`, `{item}`. Use a real newline in the field, or the two characters `\n` for a line break.
+   - **Show and verify each Pretix label before printing** — after a successful check-in, a dialog shows the resolved text read-only; **Enter** confirms and prints (or use **Print label**). **Edit text** unlocks the field so you can fix typos before printing. **Cancel** skips printing (check-in already recorded in Pretix).
 
 **QR / barcode:** USB scanners in keyboard mode usually type the ticket secret into the **Ticket secret** field; press **Enter** or click **Check in and print label**. Camera-based decoding is not included in the default build.
 
@@ -121,6 +122,7 @@ For widest Linux compatibility, build on the **oldest** distro you intend to sup
 - **Font file** — optional; empty uses bundled Bitter. Bold prefers a `*-Bold.ttf` next to the chosen file or common system bold fonts.
 - **Label width / height** — default 384×240 pixels (width must be a multiple of 8).
 - **Density / label type** — match niimctl defaults (3 and 1); adjust if your media requires it.
+- **Labels per print** — how many identical labels to feed per print action (manual or Pretix); default 1.
 - **Logging** — toggle only; path is always `~/print.log` when enabled.
 - **Pretix** — optional; see [Pretix check-in (optional)](#pretix-check-in-optional). The API token is stored in `config.json`; restrict file permissions on shared machines or prefer env vars.
 
