@@ -425,14 +425,18 @@ class MainFrame(wx.Frame):
         btn_row.AddStretchSpacer(1)
         root.Add(btn_row, 0, wx.LEFT | wx.RIGHT | wx.TOP | wx.EXPAND, 12)
 
+        # Children must use the StaticBox as parent on GTK so the group clips and lays out correctly.
         self._pretix_box = wx.StaticBox(panel, label="Pretix")
         pretix_root = wx.StaticBoxSizer(self._pretix_box, wx.VERTICAL)
-        self._pretix_secret_lbl = wx.StaticText(panel, label="Ticket secret (scan or paste QR payload):")
+        self._pretix_secret_lbl = wx.StaticText(
+            self._pretix_box,
+            label="Ticket secret (scan or paste QR payload):",
+        )
         pretix_root.Add(self._pretix_secret_lbl, 0, wx.TOP, 4)
-        self.pretix_secret_ctrl = wx.TextCtrl(panel, style=wx.TE_PROCESS_ENTER)
+        self.pretix_secret_ctrl = wx.TextCtrl(self._pretix_box, style=wx.TE_PROCESS_ENTER)
         self.pretix_secret_ctrl.SetHint("USB scanners often type the secret here; then press Enter")
         pretix_root.Add(self.pretix_secret_ctrl, 0, wx.EXPAND | wx.TOP, 6)
-        self.pretix_checkin_btn = wx.Button(panel, label="Check in and print label")
+        self.pretix_checkin_btn = wx.Button(self._pretix_box, label="Check in and print label")
         self.pretix_checkin_btn.Bind(wx.EVT_BUTTON, self._on_pretix_print)
         pretix_root.Add(self.pretix_checkin_btn, 0, wx.TOP, 8)
         root.Add(pretix_root, 0, wx.LEFT | wx.RIGHT | wx.TOP | wx.EXPAND, 12)

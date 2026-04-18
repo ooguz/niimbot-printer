@@ -65,7 +65,7 @@ The app can call your [Pretix](https://pretix.eu) instance’s [check-in redeem 
 1. In Pretix (organizer settings), create an **API token** with permission to manage check-ins for your events.
 2. In **File → Settings**, under **Pretix (optional)**:
    - Enable **Pretix check-in and badge printing**.
-   - **Pretix base URL** — HTTPS only, e.g. `https://kayit.oyd.org.tr` (no trailing path).
+   - **Pretix base URL** — HTTPS only, e.g. `https://kayit.oyd.org.tr` (no trailing slash). If Pretix lives under a subpath, include it (e.g. `https://host/pretix`).
    - **Organizer slug** — as in `https://…/org/<slug>/`.
    - **API token** — or leave empty and set environment variable `PRETIX_API_TOKEN` or `PRETX_TOKEN` (env wins over the saved field).
    - **Event slug** — used only by **Load lists** to query [check-in lists](https://docs.pretix.eu/en/latest/api/resources/checkinlists.html).

@@ -103,15 +103,21 @@ def fetch_checkin_lists(
 ) -> list[dict[str, Any]]:
     if not event_slug.strip():
         raise PretixAPIError("Event slug is required to load check-in lists.")
+    org = quote(organizer.strip(), safe="")
     ev = quote(event_slug.strip(), safe="")
     url = (
-        f"{base_url.rstrip('/')}/api/v1/organizers/{organizer}/checkinlists/"
-        f"?event={ev}"
+        f"{base_url.rstrip('/')}/api/v1/organizers/{org}/events/{ev}/checkinlists/"
     )
     status, payload = _request_json("GET", url, token, body=None)
     if status >= 400:
+        hint = ""
+        if status == 404:
+            hint = (
+                " Check the organizer slug, event slug, and base URL "
+                "(include any path prefix where Pretix is mounted, e.g. https://host/pretix)."
+            )
         raise PretixAPIError(
-            f"Failed to load check-in lists (HTTP {status}): {payload!r}"
+            f"Failed to load check-in lists (HTTP {status}): {payload!r}.{hint}"
         )
     if not isinstance(payload, dict):
         raise PretixAPIError("Unexpected check-in lists response.")
