@@ -18,7 +18,7 @@ if [[ ! -f "dist/${DIST_NAME}/niimbot-printer" ]]; then
 fi
 
 ARCH="$(uname -m)"
-VERSION="${VERSION:-0.1.0}"
+VERSION="${VERSION:-0.2.0}"
 APPDIR="${ROOT}/build/AppDir"
 rm -rf "${APPDIR}"
 mkdir -p "${APPDIR}/usr/bin" "${APPDIR}/usr/share/applications" \
