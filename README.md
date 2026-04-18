@@ -1,12 +1,14 @@
+![App icon](favicon.png) 
+
 # niimbot-printer
 
-![App icon](icon.png)
+![GitHub Release](https://img.shields.io/github/v/release/ooguz/niimbot-printer) ![PyPI - Version](https://img.shields.io/pypi/v/niimbot-printer) [![Release AppImage](https://github.com/ooguz/niimbot-printer/actions/workflows/release-appimage.yml/badge.svg)](https://github.com/ooguz/niimbot-printer/actions/workflows/release-appimage.yml) <a href="https://www.buymeacoffee.com/ooguz" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 20px !important;width: 85px !important;" ></a>
 
-`favicon.png` is a 32×32 copy for static sites or browser tabs.
+Desktop app to print **labels** on a **NIIMBOT B1** over USB serial. Optional logging records each successful print. 
 
-Desktop app to print **labels** on a **NIIMBOT B1** over USB serial, using the same packet protocol as [hairymnstr/niimctl](https://github.com/hairymnstr/niimctl). Optional logging records each successful print.
+The app can also integrate with [Pretix](https://pretix.eu) to check-in and print badges, see the section below.
 
-**Downloads:** GitHub **Releases** include two Linux **AppImage** builds when you tag a version (e.g. `v0.2.0`): `NIIMBOT-Printer-<version>-<arch>.AppImage` (standalone, no Pretix) and `NIIMBOT-Printer-<version>-<arch>-pretix.AppImage` (with Pretix).
+**TLDR Downloads:** GitHub **Releases** include two GNU/Linux **AppImage** builds: `NIIMBOT-Printer-<version>-<arch>.AppImage` (standalone, no Pretix support) and `NIIMBOT-Printer-<version>-<arch>-pretix.AppImage` (with Pretix support).
 
 ## Requirements
 
@@ -111,7 +113,7 @@ This produces `dist/NIIMBOT-Printer-<version>-<arch>.AppImage` (standalone) and 
 
 Release CI builds **both** AppImages when you push a version tag.
 
-For widest Linux compatibility, build on the **oldest** distro you intend to support (glibc on the build machine sets the floor).
+For widest GNU/Linux compatibility, build on the **oldest** distro you intend to support (glibc on the build machine sets the floor).
 
 ## Settings
 
@@ -123,6 +125,23 @@ For widest Linux compatibility, build on the **oldest** distro you intend to sup
 - **Logging** — toggle only; path is always `~/print.log` when enabled.
 - **Pretix** — optional; see [Pretix check-in (optional)](#pretix-check-in-optional). The API token is stored in `config.json`; restrict file permissions on shared machines or prefer env vars.
 
+## Thanks
+
+- [hairymnstr/niimctl](https://github.com/hairymnstr/niimctl) for protocol reverse engineering
+
 ## License
 
-This project is licensed under the GNU General Public License v3.0 or later.
+Copyright (C) 2026 Özcan Oğuz
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.

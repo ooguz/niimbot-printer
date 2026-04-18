@@ -24,4 +24,4 @@ dev = ["pyinstaller>=6.0"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-niimbot_printer = ["data/fonts/*", "data/icon.png"]
+niimbot_printer = ["data/fonts/*", "data/icon.png", "data/LICENSE"]

@@ -15,6 +15,9 @@ icon_arg = icon_png if os.path.isfile(icon_png) else None
 datas_list = [(font_dir, "niimbot_printer/data/fonts")]
 if os.path.isfile(icon_pkg):
     datas_list.append((icon_pkg, "niimbot_printer/data"))
+license_file = os.path.join(root, "LICENSE")
+if os.path.isfile(license_file):
+    datas_list.append((license_file, "niimbot_printer/data"))
 
 a = Analysis(
     [os.path.join(spec_dir, "entry.py")],

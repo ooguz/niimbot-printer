@@ -10,7 +10,7 @@ __all__ = ["render_name_label"]
 
 # Extra margin at bottom of bitmap — printers often clip the last rows; keep room
 # for descenders (e.g. g, j, ş, ğ).
-_BOTTOM_SAFE_PX = 26
+_BOTTOM_SAFE_PX = 32
 
 
 def _try_truetype(paths: list[str], size: int) -> ImageFont.FreeTypeFont | None:

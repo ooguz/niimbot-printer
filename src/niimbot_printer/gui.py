@@ -9,7 +9,7 @@ from dataclasses import replace
 
 import wx
 
-from niimbot_printer import audit_log, printer, renderer, resources, settings
+from niimbot_printer import about_dialog, audit_log, printer, renderer, resources, settings
 
 __all__ = ["MainFrame", "SettingsDialog", "run_app"]
 
@@ -529,9 +529,13 @@ class MainFrame(wx.Frame):
         file_m.AppendSeparator()
         file_m.Append(wx.ID_EXIT, "Quit\tCtrl+Q")
         bar.Append(file_m, "&File")
+        help_m = wx.Menu()
+        help_m.Append(wx.ID_ABOUT, "&About…")
+        bar.Append(help_m, "&Help")
         self.SetMenuBar(bar)
         self.Bind(wx.EVT_MENU, self._on_settings, id=wx.ID_PREFERENCES)
         self.Bind(wx.EVT_MENU, self._on_quit, id=wx.ID_EXIT)
+        self.Bind(wx.EVT_MENU, self._on_about, id=wx.ID_ABOUT)
         _set_frame_icon(self)
 
         panel = wx.Panel(self)
@@ -597,6 +601,9 @@ class MainFrame(wx.Frame):
 
     def _on_quit(self, _evt: wx.CommandEvent) -> None:
         self.Close()
+
+    def _on_about(self, _evt: wx.CommandEvent) -> None:
+        about_dialog.show_about_dialog(self)
 
     def _on_settings(self, _evt: wx.CommandEvent) -> None:
         dlg = SettingsDialog(self, self._settings)

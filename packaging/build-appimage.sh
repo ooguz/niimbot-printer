@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a Linux AppImage from a PyInstaller one-folder bundle.
+# Build a GNU/Linux AppImage from a PyInstaller one-folder bundle.
 # Prerequisites: Python venv with pyinstaller, wxPython, Pillow, pyserial;
 # appimagetool on PATH ( https://github.com/AppImage/AppImageKit/releases ).
 set -euo pipefail
