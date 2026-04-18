@@ -74,7 +74,7 @@ def _set_frame_icon(frame: wx.Frame) -> None:
 
 
 def _print_label_copies(name: str, cfg: settings.AppSettings) -> None:
-    """Render once and send the same raster ``cfg.effective_label_copies()`` times."""
+    """Render once; send copies in one serial session (see ``print_raster(..., copies=…)``)."""
     fp = cfg.effective_font_path()
     copies = cfg.effective_label_copies()
     im = renderer.render_name_label(
@@ -91,16 +91,16 @@ def _print_label_copies(name: str, cfg: settings.AppSettings) -> None:
         print(s, flush=True)
 
     dbg_fn = dbg if cfg.debug_serial else None
-    for _ in range(copies):
-        printer.print_raster(
-            cfg.serial_port,
-            w,
-            h,
-            rows,
-            density=cfg.density,
-            label_type=cfg.label_type,
-            debug=dbg_fn,
-        )
+    printer.print_raster(
+        cfg.serial_port,
+        w,
+        h,
+        rows,
+        copies=copies,
+        density=cfg.density,
+        label_type=cfg.label_type,
+        debug=dbg_fn,
+    )
 
 
 class PretixLabelVerifyDialog(wx.Dialog):

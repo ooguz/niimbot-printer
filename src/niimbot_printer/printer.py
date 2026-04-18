@@ -91,17 +91,84 @@ def _expect_ok(
     return p
 
 
+def _print_one_label_session(
+    s: serial.Serial,
+    width: int,
+    height: int,
+    rows: list[list[int]],
+    *,
+    debug: Callable[[str], None] | None,
+    status_polls: int,
+    status_interval_s: float,
+    status_recv_timeout: float,
+) -> None:
+    """One print job (0x01…0xF3) on an already-open port."""
+    send_packet(s, 0x01, struct.pack(">HIB", 1, 0, 0))
+    _expect_ok(s, debug, "print start (0x01)")
+
+    send_packet(s, 0x03, b"\x01")
+    _expect_ok(s, debug, "page start (0x03)")
+
+    send_packet(s, 0x13, struct.pack(">HHH", height, width, 1))
+    _expect_ok(s, debug, "set page size (0x13)")
+
+    blank_rows = 0
+    blank_start = -1
+    for row_num, row in enumerate(rows):
+        if sum(row) == 0:
+            if blank_rows == 0:
+                blank_start = row_num
+            blank_rows += 1
+        else:
+            if blank_rows:
+                send_packet(s, 0x84, struct.pack(">HB", blank_start, blank_rows))
+                blank_rows = 0
+            printpx = 0
+            for b in row:
+                for bit in range(8):
+                    if b & (1 << bit):
+                        printpx += 1
+            payload = struct.pack(">HHH", row_num, printpx, 1) + bytes(row)
+            send_packet(s, 0x85, payload)
+
+    if blank_rows:
+        send_packet(s, 0x84, struct.pack(">HB", blank_start, blank_rows))
+
+    p = recv_packet(s)
+    if debug:
+        debug(f"pre page end 1: {p!r}")
+    p = recv_packet(s)
+    if debug:
+        debug(f"pre page end 2: {p!r}")
+
+    send_packet(s, 0xE3, b"\x01")
+    p = recv_packet(s)
+    if debug:
+        debug(f"after 0xe3: {p!r}")
+
+    for _ in range(status_polls):
+        send_packet(s, 0xA3, b"")
+        p = recv_packet(s, timeout=status_recv_timeout)
+        if debug:
+            debug(f"status 0xa3: {p!r}")
+        time.sleep(status_interval_s)
+
+    send_packet(s, 0xF3, b"\x01")
+
+
 def print_raster(
     port_path: str,
     width: int,
     height: int,
     rows: list[list[int]],
     *,
+    copies: int = 1,
     density: int = 3,
     label_type: int = 1,
     status_polls: int = 12,
     status_interval_s: float = 0.05,
     status_recv_timeout: float = 0.2,
+    inter_copy_delay_s: float = 0.25,
     debug: Callable[[str], None] | None = None,
 ) -> None:
     """
@@ -109,6 +176,9 @@ def print_raster(
 
     ``rows`` is a list of length ``height``; each row is a list of byte values
     (length width/8) with MSB-first pixels, matching niimctl packing.
+
+    Multiple ``copies`` are sent in a **single** serial session (re-opening the
+    port between jobs often results in only one physical label).
     """
     if width > 400:
         raise PrinterError("Image must be at most 400 pixels wide")
@@ -121,6 +191,7 @@ def print_raster(
         if len(row) != expected_row_len:
             raise PrinterError(f"Row {i}: expected {expected_row_len} bytes, got {len(row)}")
 
+    n_copies = max(1, min(99, int(copies)))
     density_b = max(1, min(5, int(density))) & 0xFF
     label_type_b = max(1, min(3, int(label_type))) & 0xFF
 
@@ -133,57 +204,19 @@ def print_raster(
         send_packet(s, 0x23, bytes([label_type_b]))
         _expect_ok(s, debug, "set label type (0x23)")
 
-        send_packet(s, 0x01, struct.pack(">HIB", 1, 0, 0))
-        _expect_ok(s, debug, "print start (0x01)")
-
-        send_packet(s, 0x03, b"\x01")
-        _expect_ok(s, debug, "page start (0x03)")
-
-        send_packet(s, 0x13, struct.pack(">HHH", height, width, 1))
-        _expect_ok(s, debug, "set page size (0x13)")
-
-        blank_rows = 0
-        blank_start = -1
-        for row_num, row in enumerate(rows):
-            if sum(row) == 0:
-                if blank_rows == 0:
-                    blank_start = row_num
-                blank_rows += 1
-            else:
-                if blank_rows:
-                    send_packet(s, 0x84, struct.pack(">HB", blank_start, blank_rows))
-                    blank_rows = 0
-                printpx = 0
-                for b in row:
-                    for bit in range(8):
-                        if b & (1 << bit):
-                            printpx += 1
-                payload = struct.pack(">HHH", row_num, printpx, 1) + bytes(row)
-                send_packet(s, 0x85, payload)
-
-        if blank_rows:
-            send_packet(s, 0x84, struct.pack(">HB", blank_start, blank_rows))
-
-        p = recv_packet(s)
-        if debug:
-            debug(f"pre page end 1: {p!r}")
-        p = recv_packet(s)
-        if debug:
-            debug(f"pre page end 2: {p!r}")
-
-        send_packet(s, 0xE3, b"\x01")
-        p = recv_packet(s)
-        if debug:
-            debug(f"after 0xe3: {p!r}")
-
-        for _ in range(status_polls):
-            send_packet(s, 0xA3, b"")
-            p = recv_packet(s, timeout=status_recv_timeout)
-            if debug:
-                debug(f"status 0xa3: {p!r}")
-            time.sleep(status_interval_s)
-
-        send_packet(s, 0xF3, b"\x01")
+        for i in range(n_copies):
+            _print_one_label_session(
+                s,
+                width,
+                height,
+                rows,
+                debug=debug,
+                status_polls=status_polls,
+                status_interval_s=status_interval_s,
+                status_recv_timeout=status_recv_timeout,
+            )
+            if i + 1 < n_copies and inter_copy_delay_s > 0:
+                time.sleep(inter_copy_delay_s)
     finally:
         s.close()
 
