@@ -6,10 +6,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-if [[ ! -f dist/niimbot-printer/niimbot-printer ]]; then
-  echo "Run PyInstaller first:"
+DIST_NAME="${DIST_NAME:-niimbot-printer}"
+APPIMAGE_VARIANT="${APPIMAGE_VARIANT:-}"
+
+if [[ ! -f "dist/${DIST_NAME}/niimbot-printer" ]]; then
+  echo "Run PyInstaller first (executable must be at dist/${DIST_NAME}/niimbot-printer):"
   echo "  pip install -e '.[dev]'"
   echo "  pyinstaller packaging/pyinstaller.spec"
+  echo "  # or: pyinstaller packaging/pyinstaller-minimal.spec && DIST_NAME=niimbot-printer-minimal $0"
   exit 1
 fi
 
@@ -23,7 +27,7 @@ mkdir -p "${APPDIR}/usr/bin" "${APPDIR}/usr/share/applications" \
   "${APPDIR}/usr/share/icons/hicolor/48x48/apps" \
   "${APPDIR}/usr/share/icons/hicolor/32x32/apps"
 
-cp -a "${ROOT}/dist/niimbot-printer/." "${APPDIR}/usr/bin/"
+cp -a "${ROOT}/dist/${DIST_NAME}/." "${APPDIR}/usr/bin/"
 
 cp "${ROOT}/packaging/niimbot-printer.desktop" "${APPDIR}/usr/share/applications/"
 
@@ -60,5 +64,9 @@ if ! command -v appimagetool >/dev/null 2>&1; then
 fi
 
 export ARCH
-appimagetool "${APPDIR}" "${ROOT}/dist/NIIMBOT-Printer-${VERSION}-${ARCH}.AppImage"
-echo "Wrote dist/NIIMBOT-Printer-${VERSION}-${ARCH}.AppImage"
+OUT_NAME="NIIMBOT-Printer-${VERSION}-${ARCH}"
+if [[ -n "${APPIMAGE_VARIANT}" ]]; then
+  OUT_NAME="${OUT_NAME}-${APPIMAGE_VARIANT}"
+fi
+appimagetool "${APPDIR}" "${ROOT}/dist/${OUT_NAME}.AppImage"
+echo "Wrote dist/${OUT_NAME}.AppImage"

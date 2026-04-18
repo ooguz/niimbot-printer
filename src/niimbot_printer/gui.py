@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import threading
 import traceback
 from dataclasses import replace
@@ -11,6 +12,56 @@ import wx
 from niimbot_printer import audit_log, printer, renderer, resources, settings
 
 __all__ = ["MainFrame", "SettingsDialog", "run_app"]
+
+
+def _pretix_module_available() -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec("niimbot_printer.pretix.client") is not None
+
+
+def _parse_list_ids_field(s: str) -> list[int]:
+    out: list[int] = []
+    for part in s.replace(";", ",").split(","):
+        p = part.strip()
+        if not p:
+            continue
+        try:
+            out.append(int(p))
+        except ValueError:
+            continue
+    return out
+
+
+def _pretix_failure_message(data: dict) -> str:
+    status = data.get("status")
+    if status == "incomplete":
+        return (
+            "Check-in incomplete: Pretix expects answers to check-in questions. "
+            "Change the check-in list in Pretix or enable question handling in a future version."
+        )
+    if status == "error":
+        reason = str(data.get("reason") or "unknown")
+        expl = (data.get("reason_explanation") or "").strip()
+        friendly = {
+            "already_redeemed": "This ticket has already been checked in.",
+            "invalid": "Invalid or unknown ticket.",
+            "canceled": "This order has been canceled.",
+            "unpaid": "Order is not paid.",
+            "revoked": "This ticket has been revoked.",
+            "blocked": "This ticket is blocked.",
+            "ambiguous": "Multiple matching tickets; narrow check-in lists in Settings.",
+            "rules": "Check-in rules blocked this ticket.",
+            "incomplete": "Order or attendee data is incomplete.",
+            "product": "Product rules prevent check-in.",
+            "unapproved": "Order is not approved yet.",
+            "invalid_time": "Check-in is not allowed at this time.",
+        }.get(reason, "")
+        base = friendly or f"Pretix error ({reason})."
+        if expl:
+            return f"{base}\n{expl}"
+        return base
+    return f"Unexpected Pretix response: {data!r}"
 
 
 def _set_frame_icon(frame: wx.Frame) -> None:
@@ -98,7 +149,69 @@ class SettingsDialog(wx.Dialog):
         self.debug_serial.SetValue(cfg.debug_serial)
         grid.Add(self.debug_serial, 0, wx.EXPAND)
 
-        main.Add(grid, 1, wx.ALL | wx.EXPAND, 12)
+        main.Add(grid, 0, wx.ALL | wx.EXPAND, 12)
+
+        pretix_box = wx.StaticBox(self, label="Pretix (optional)")
+        pretix_sz = wx.StaticBoxSizer(pretix_box, wx.VERTICAL)
+        pgrid = wx.FlexGridSizer(0, 2, 8, 8)
+        pgrid.AddGrowableCol(1, 1)
+
+        self.pretix_enabled = wx.CheckBox(self, label="Enable Pretix check-in and badge printing")
+        self.pretix_enabled.SetValue(cfg.pretix_enabled)
+        pgrid.Add(self.pretix_enabled, 0, wx.EXPAND)
+        pgrid.Add(wx.StaticText(self, label=""), 0)
+
+        pgrid.Add(wx.StaticText(self, label="Pretix base URL:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.pretix_base_url = wx.TextCtrl(self, value=cfg.pretix_base_url)
+        self.pretix_base_url.SetHint("https://kayit.oyd.org.tr")
+        pgrid.Add(self.pretix_base_url, 0, wx.EXPAND)
+
+        pgrid.Add(wx.StaticText(self, label="Organizer slug:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.pretix_organizer = wx.TextCtrl(self, value=cfg.pretix_organizer_slug)
+        pgrid.Add(self.pretix_organizer, 0, wx.EXPAND)
+
+        pgrid.Add(wx.StaticText(self, label="API token:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.pretix_token = wx.TextCtrl(self, value=cfg.pretix_api_token, style=wx.TE_PASSWORD)
+        pgrid.Add(self.pretix_token, 0, wx.EXPAND)
+
+        pgrid.Add(wx.StaticText(self, label=""), 0)
+        pgrid.Add(
+            wx.StaticText(
+                self,
+                label="Token can be set via env PRETIX_API_TOKEN or PRETX_TOKEN instead of saving here.",
+            ),
+            0,
+            wx.EXPAND,
+        )
+
+        pgrid.Add(wx.StaticText(self, label="Event slug:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.pretix_event = wx.TextCtrl(self, value=cfg.pretix_event_slug)
+        self.pretix_event.SetHint("Used by “Load lists” only")
+        pgrid.Add(self.pretix_event, 0, wx.EXPAND)
+
+        pgrid.Add(wx.StaticText(self, label="Check-in list ID(s):"), 0, wx.ALIGN_CENTER_VERTICAL)
+        list_row = wx.BoxSizer(wx.HORIZONTAL)
+        ids_display = ", ".join(str(i) for i in cfg.pretix_checkin_list_ids)
+        self.pretix_list_ids = wx.TextCtrl(self, value=ids_display)
+        self.pretix_list_ids.SetHint("Comma-separated, e.g. 1 or 1, 2")
+        list_row.Add(self.pretix_list_ids, 1, wx.EXPAND)
+        self.pretix_load_lists = wx.Button(self, label="Load lists")
+        self.pretix_load_lists.Bind(wx.EVT_BUTTON, self._on_load_checkin_lists)
+        list_row.Add(self.pretix_load_lists, 0, wx.LEFT, 6)
+        pgrid.Add(list_row, 1, wx.EXPAND)
+
+        pgrid.Add(wx.StaticText(self, label="Badge text template:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.pretix_badge_tpl = wx.TextCtrl(self, value=cfg.pretix_badge_template)
+        self.pretix_badge_tpl.SetHint("{attendee_name} or {attendee_name}\\n{company}")
+        pgrid.Add(self.pretix_badge_tpl, 0, wx.EXPAND)
+
+        pretix_sz.Add(pgrid, 0, wx.ALL | wx.EXPAND, 8)
+        main.Add(pretix_sz, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 12)
+
+        pretix_avail = _pretix_module_available()
+        if not pretix_avail:
+            self.pretix_load_lists.Enable(False)
+            self.pretix_load_lists.SetToolTip("This build does not include the Pretix module.")
 
         btns = wx.StdDialogButtonSizer()
         ok = wx.Button(self, wx.ID_OK)
@@ -110,7 +223,7 @@ class SettingsDialog(wx.Dialog):
 
         self.SetSizer(main)
         self.Fit()
-        min_w = 520
+        min_w = 600
         self.SetSizeHints(min_w, -1)
         self.SetClientSize(self.GetBestSize().Width, self.GetBestSize().Height)
 
@@ -158,6 +271,71 @@ class SettingsDialog(wx.Dialog):
                 return
             self.font_path.SetValue(dlg.GetPath())
 
+    def _on_load_checkin_lists(self, _evt: wx.CommandEvent) -> None:
+        if not _pretix_module_available():
+            wx.MessageBox(
+                "This application build does not include Pretix support.",
+                "Pretix",
+                wx.OK | wx.ICON_INFORMATION,
+            )
+            return
+        import os
+
+        base = self.pretix_base_url.GetValue().strip()
+        org = self.pretix_organizer.GetValue().strip()
+        ev = self.pretix_event.GetValue().strip()
+        token = (
+            os.environ.get("PRETIX_API_TOKEN", "").strip()
+            or os.environ.get("PRETX_TOKEN", "").strip()
+            or self.pretix_token.GetValue().strip()
+        )
+        if not base.startswith("https://"):
+            wx.MessageBox(
+                "Set a valid HTTPS Pretix base URL first.",
+                "Pretix",
+                wx.OK | wx.ICON_WARNING,
+            )
+            return
+        if not org or not token:
+            wx.MessageBox(
+                "Organizer slug and API token are required.",
+                "Pretix",
+                wx.OK | wx.ICON_WARNING,
+            )
+            return
+        if not ev:
+            wx.MessageBox("Enter the event slug to load lists.", "Pretix", wx.OK | wx.ICON_WARNING)
+            return
+
+        self.pretix_load_lists.Enable(False)
+
+        def worker() -> None:
+            try:
+                client = importlib.import_module("niimbot_printer.pretix.client")
+                rows = client.fetch_checkin_lists(base, org, token, ev)
+                wx.CallAfter(self._on_checkin_lists_loaded, rows, None)
+            except Exception as e:
+                wx.CallAfter(self._on_checkin_lists_loaded, None, e)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_checkin_lists_loaded(self, rows: list | None, err: Exception | None) -> None:
+        self.pretix_load_lists.Enable(True)
+        if err is not None:
+            wx.MessageBox(str(err), "Could not load check-in lists", wx.OK | wx.ICON_ERROR)
+            return
+        if not rows:
+            wx.MessageBox("No check-in lists returned for this event.", "Pretix", wx.OK | wx.ICON_INFORMATION)
+            return
+        lines = [f"{r.get('id')}: {r.get('name', '')}" for r in rows if isinstance(r, dict)]
+        self.pretix_list_ids.SetValue(", ".join(str(r.get("id")) for r in rows if isinstance(r, dict)))
+        wx.MessageBox(
+            "Check-in list IDs were filled in. Details:\n\n" + "\n".join(lines[:40])
+            + ("\n…" if len(lines) > 40 else ""),
+            "Check-in lists",
+            wx.OK | wx.ICON_INFORMATION,
+        )
+
     def _on_ok(self, _evt: wx.CommandEvent) -> None:
         port = self._current_port_device()
         if not port:
@@ -168,6 +346,27 @@ class SettingsDialog(wx.Dialog):
         if w % 8:
             wx.MessageBox("Label width must be a multiple of 8.", "Settings", wx.OK | wx.ICON_WARNING)
             return
+
+        pretix_on = self.pretix_enabled.GetValue()
+        pretix_url = self.pretix_base_url.GetValue().strip()
+        if pretix_on and pretix_url and not pretix_url.startswith("https://"):
+            wx.MessageBox(
+                "Pretix base URL must use https://",
+                "Settings",
+                wx.OK | wx.ICON_WARNING,
+            )
+            return
+
+        list_ids = _parse_list_ids_field(self.pretix_list_ids.GetValue())
+        if pretix_on and not list_ids:
+            wx.MessageBox(
+                "Pretix is enabled but no check-in list IDs were set. "
+                "Add at least one numeric ID (or disable Pretix).",
+                "Settings",
+                wx.OK | wx.ICON_WARNING,
+            )
+            return
+
         self._result = settings.AppSettings(
             serial_port=port,
             font_path=self.font_path.GetValue().strip(),
@@ -179,6 +378,13 @@ class SettingsDialog(wx.Dialog):
             label_type=int(self.label_type.GetValue()),
             logging_enabled=self.logging_on.GetValue(),
             debug_serial=self.debug_serial.GetValue(),
+            pretix_enabled=pretix_on,
+            pretix_base_url=pretix_url,
+            pretix_organizer_slug=self.pretix_organizer.GetValue().strip(),
+            pretix_api_token=self.pretix_token.GetValue().strip(),
+            pretix_event_slug=self.pretix_event.GetValue().strip(),
+            pretix_checkin_list_ids=list_ids,
+            pretix_badge_template=self.pretix_badge_tpl.GetValue().strip() or "{attendee_name}",
         )
         self.EndModal(wx.ID_OK)
 
@@ -219,6 +425,18 @@ class MainFrame(wx.Frame):
         btn_row.AddStretchSpacer(1)
         root.Add(btn_row, 0, wx.LEFT | wx.RIGHT | wx.TOP | wx.EXPAND, 12)
 
+        self._pretix_box = wx.StaticBox(panel, label="Pretix")
+        pretix_root = wx.StaticBoxSizer(self._pretix_box, wx.VERTICAL)
+        self._pretix_secret_lbl = wx.StaticText(panel, label="Ticket secret (scan or paste QR payload):")
+        pretix_root.Add(self._pretix_secret_lbl, 0, wx.TOP, 4)
+        self.pretix_secret_ctrl = wx.TextCtrl(panel, style=wx.TE_PROCESS_ENTER)
+        self.pretix_secret_ctrl.SetHint("USB scanners often type the secret here; then press Enter")
+        pretix_root.Add(self.pretix_secret_ctrl, 0, wx.EXPAND | wx.TOP, 6)
+        self.pretix_checkin_btn = wx.Button(panel, label="Check in and print label")
+        self.pretix_checkin_btn.Bind(wx.EVT_BUTTON, self._on_pretix_print)
+        pretix_root.Add(self.pretix_checkin_btn, 0, wx.TOP, 8)
+        root.Add(pretix_root, 0, wx.LEFT | wx.RIGHT | wx.TOP | wx.EXPAND, 12)
+
         stats_box = wx.StaticBox(panel, label="Statistics")
         stats_sizer = wx.StaticBoxSizer(stats_box, wx.VERTICAL)
         stat_font = wx.Font(wx.FontInfo(11))
@@ -243,6 +461,8 @@ class MainFrame(wx.Frame):
         root.Add(self.status, 0, wx.LEFT | wx.RIGHT | wx.TOP | wx.EXPAND, 12)
 
         panel.SetSizer(root)
+        self.pretix_secret_ctrl.Bind(wx.EVT_TEXT_ENTER, self._on_pretix_print)
+        self._sync_pretix_panel()
         self._update_status_line()
         self.name_ctrl.Bind(wx.EVT_TEXT_ENTER, self._on_print)
         self.Centre()
@@ -260,12 +480,24 @@ class MainFrame(wx.Frame):
         if res:
             self._settings = res
             settings.save_settings(self._settings)
+            self._sync_pretix_panel()
             self._update_status_line()
+
+    def _sync_pretix_panel(self) -> None:
+        show = bool(self._settings.pretix_enabled and _pretix_module_available())
+        self._pretix_box.Show(show)
+        self._pretix_secret_lbl.Show(show)
+        self.pretix_secret_ctrl.Show(show)
+        self.pretix_checkin_btn.Show(show)
+        self.Layout()
 
     def _set_busy(self, busy: bool) -> None:
         self._printing = busy
         self.print_btn.Enable(not busy)
         self.name_ctrl.Enable(not busy)
+        if self.pretix_secret_ctrl.IsShown():
+            self.pretix_secret_ctrl.Enable(not busy)
+            self.pretix_checkin_btn.Enable(not busy)
 
     def _refresh_statistics(self) -> None:
         st = settings.load_state()
@@ -279,9 +511,140 @@ class MainFrame(wx.Frame):
     def _update_status_line(self) -> None:
         cfg = self._settings
         log_note = "logging on → ~/print.log" if cfg.logging_enabled else "logging off (no file writes)"
-        msg = f"Port: {cfg.serial_port}  |  {log_note}"
+        if cfg.pretix_enabled and not _pretix_module_available():
+            pt = "Pretix requested but this build has no Pretix module"
+        elif cfg.pretix_enabled:
+            pt = "Pretix on"
+        else:
+            pt = "Pretix off"
+        msg = f"Port: {cfg.serial_port}  |  {pt}  |  {log_note}"
         self.status.SetLabel(msg)
         self._refresh_statistics()
+
+    def _on_pretix_print(self, _evt: wx.CommandEvent | wx.KeyEvent) -> None:
+        if self._printing:
+            return
+        if not self._settings.pretix_enabled:
+            return
+        if not _pretix_module_available():
+            wx.MessageBox(
+                "This build was compiled without Pretix support.",
+                "Pretix",
+                wx.OK | wx.ICON_INFORMATION,
+            )
+            return
+        raw = self.pretix_secret_ctrl.GetValue().strip()
+        if not raw:
+            wx.MessageBox(
+                "Enter or scan the ticket secret first.",
+                "Pretix",
+                wx.OK | wx.ICON_INFORMATION,
+            )
+            return
+
+        cfg_snapshot = replace(self._settings)
+        base = cfg_snapshot.pretix_base_url.strip()
+        org = cfg_snapshot.pretix_organizer_slug.strip()
+        token = cfg_snapshot.effective_pretix_token()
+        lists = cfg_snapshot.pretix_lists()
+        if not base.startswith("https://"):
+            wx.MessageBox("Set a valid HTTPS Pretix URL in Settings.", "Pretix", wx.OK | wx.ICON_WARNING)
+            return
+        if not org or not token:
+            wx.MessageBox(
+                "Configure organizer slug and API token in Settings (or use env).",
+                "Pretix",
+                wx.OK | wx.ICON_WARNING,
+            )
+            return
+        if not lists:
+            wx.MessageBox("Add at least one check-in list ID in Settings.", "Pretix", wx.OK | wx.ICON_WARNING)
+            return
+
+        self._set_busy(True)
+
+        def worker() -> None:
+            try:
+                parse_secret = importlib.import_module("niimbot_printer.pretix.parse_secret")
+                badge_text = importlib.import_module("niimbot_printer.pretix.badge_text")
+                client = importlib.import_module("niimbot_printer.pretix.client")
+
+                secret = parse_secret.normalize_secret(raw)
+                if not secret:
+                    raise ValueError("Empty ticket secret after parsing.")
+
+                result = client.redeem(
+                    base,
+                    org,
+                    token,
+                    secret,
+                    lists,
+                    questions_supported=False,
+                )
+                data = result.data
+                if data.get("status") != "ok":
+                    raise client.PretixAPIError(_pretix_failure_message(data))
+
+                position = data.get("position")
+                if not isinstance(position, dict):
+                    raise client.PretixAPIError("Pretix did not return attendee data.")
+
+                label = badge_text.build_badge_text(position, cfg_snapshot.pretix_badge_template)
+                list_info = data.get("list") if isinstance(data.get("list"), dict) else {}
+                ev_slug = list_info.get("event")
+                ev_slug_s = str(ev_slug).strip() if ev_slug else None
+                ctx = badge_text.position_context(position)
+                order_code = ctx.get("order") or None
+                pid = position.get("id")
+                try:
+                    pos_id = int(pid) if pid is not None else None
+                except (TypeError, ValueError):
+                    pos_id = None
+
+                fp = cfg_snapshot.effective_font_path()
+                im = renderer.render_name_label(
+                    label,
+                    cfg_snapshot.label_width_px,
+                    cfg_snapshot.label_height_px,
+                    font_path=fp,
+                    font_size=cfg_snapshot.font_size,
+                    bold=cfg_snapshot.bold,
+                )
+                w, h, rows = printer.image_to_rows(im)
+
+                def dbg(s: str) -> None:
+                    print(s, flush=True)
+
+                printer.print_raster(
+                    cfg_snapshot.serial_port,
+                    w,
+                    h,
+                    rows,
+                    density=cfg_snapshot.density,
+                    label_type=cfg_snapshot.label_type,
+                    debug=dbg if cfg_snapshot.debug_serial else None,
+                )
+            except Exception as e:
+                wx.CallAfter(
+                    self._on_print_finished,
+                    "",
+                    cfg_snapshot,
+                    e,
+                )
+            else:
+                wx.CallAfter(
+                    self._on_print_finished,
+                    label,
+                    cfg_snapshot,
+                    None,
+                    source="pretix",
+                    pretix_event_slug=ev_slug_s,
+                    pretix_order_code=order_code,
+                    pretix_position_id=pos_id,
+                    clear_pretix_field=True,
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _on_print(self, _evt: wx.CommandEvent | wx.KeyEvent) -> None:
         if self._printing:
@@ -331,11 +694,31 @@ class MainFrame(wx.Frame):
         name: str,
         cfg: settings.AppSettings,
         err: Exception | None,
+        *,
+        source: str = "manual",
+        pretix_event_slug: str | None = None,
+        pretix_order_code: str | None = None,
+        pretix_position_id: int | None = None,
+        clear_pretix_field: bool = False,
     ) -> None:
         self._set_busy(False)
         if err is not None:
-            if isinstance(err, (printer.PrinterError, OSError, ValueError)):
-                wx.MessageBox(str(err), "Print failed", wx.OK | wx.ICON_ERROR)
+            pretix_err: type | None = None
+            if _pretix_module_available():
+                pretix_err = getattr(
+                    importlib.import_module("niimbot_printer.pretix.client"),
+                    "PretixAPIError",
+                )
+            known = isinstance(err, (printer.PrinterError, OSError, ValueError)) or (
+                pretix_err is not None and isinstance(err, pretix_err)
+            )
+            if known:
+                title = (
+                    "Pretix"
+                    if pretix_err is not None and isinstance(err, pretix_err)
+                    else "Print failed"
+                )
+                wx.MessageBox(str(err), title, wx.OK | wx.ICON_ERROR)
             else:
                 wx.MessageBox(traceback.format_exc(), "Print failed", wx.OK | wx.ICON_ERROR)
             return
@@ -347,14 +730,29 @@ class MainFrame(wx.Frame):
 
         if cfg.logging_enabled:
             try:
-                audit_log.record_print(cfg.effective_log_path(), name=name, seq=seq, source="manual")
+                if source == "pretix":
+                    audit_log.record_print(
+                        cfg.effective_log_path(),
+                        name=name,
+                        seq=seq,
+                        source="pretix",
+                        pretix_event_slug=pretix_event_slug,
+                        pretix_order_code=pretix_order_code,
+                        pretix_position_id=pretix_position_id,
+                    )
+                else:
+                    audit_log.record_print(cfg.effective_log_path(), name=name, seq=seq, source="manual")
             except OSError as e:
                 wx.MessageBox(f"Printed OK but log write failed:\n{e}", "Log error", wx.OK | wx.ICON_WARNING)
 
         self._session_prints += 1
         self._update_status_line()
-        self.name_ctrl.SetFocus()
-        self.name_ctrl.SelectAll()
+        if clear_pretix_field:
+            self.pretix_secret_ctrl.SetValue("")
+            self.pretix_secret_ctrl.SetFocus()
+        else:
+            self.name_ctrl.SetFocus()
+            self.name_ctrl.SelectAll()
 
 
 def run_app() -> None:

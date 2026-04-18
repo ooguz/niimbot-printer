@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Run from repo root: pyinstaller packaging/pyinstaller.spec
+# Standalone build without Pretix (smaller bundle). From repo root:
+#   pyinstaller packaging/pyinstaller-minimal.spec
 
 import os
 
@@ -29,16 +30,12 @@ a = Analysis(
         "niimbot_printer.settings",
         "niimbot_printer.resources",
         "niimbot_printer.audit_log",
-        "niimbot_printer.pretix",
-        "niimbot_printer.pretix.client",
-        "niimbot_printer.pretix.parse_secret",
-        "niimbot_printer.pretix.badge_text",
         "serial.tools.list_ports",
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=["niimbot_printer.pretix"],
     noarchive=False,
     optimize=0,
 )
@@ -71,5 +68,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="niimbot-printer",
+    name="niimbot-printer-minimal",
 )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +57,13 @@ class AppSettings:
     label_type: int = 1
     logging_enabled: bool = True
     debug_serial: bool = False
+    pretix_enabled: bool = False
+    pretix_base_url: str = ""
+    pretix_organizer_slug: str = ""
+    pretix_api_token: str = ""
+    pretix_event_slug: str = ""
+    pretix_checkin_list_ids: list[int] = field(default_factory=list)
+    pretix_badge_template: str = "{attendee_name}"
 
     def effective_font_path(self) -> str | None:
         if self.font_path.strip():
@@ -66,6 +73,19 @@ class AppSettings:
 
     def effective_log_path(self) -> Path:
         return audit_log_path()
+
+    def effective_pretix_token(self) -> str:
+        """API token from env (``PRETIX_API_TOKEN`` or ``PRETX_TOKEN``) or config."""
+        env_tok = (
+            os.environ.get("PRETIX_API_TOKEN", "").strip()
+            or os.environ.get("PRETX_TOKEN", "").strip()
+        )
+        if env_tok:
+            return env_tok
+        return self.pretix_api_token.strip()
+
+    def pretix_lists(self) -> list[int]:
+        return list(self.pretix_checkin_list_ids)
 
 
 @dataclass
@@ -88,11 +108,29 @@ def load_settings() -> AppSettings:
     return _settings_from_dict(data)
 
 
+def _coerce_checkin_list_ids(raw: Any) -> list[int]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        out: list[int] = []
+        for x in raw:
+            try:
+                out.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        return out
+    return []
+
+
 def _settings_from_dict(data: dict[str, Any]) -> AppSettings:
     base = AppSettings()
     names = {f.name for f in fields(AppSettings)}
     for key, value in data.items():
-        if key in names:
+        if key not in names:
+            continue
+        if key == "pretix_checkin_list_ids":
+            setattr(base, key, _coerce_checkin_list_ids(value))
+        else:
             setattr(base, key, value)
     return base
 
