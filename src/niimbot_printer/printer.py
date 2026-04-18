@@ -169,6 +169,7 @@ def print_raster(
     status_interval_s: float = 0.05,
     status_recv_timeout: float = 0.2,
     inter_copy_delay_s: float = 0.25,
+    flush_before_close_s: float = 0.55,
     debug: Callable[[str], None] | None = None,
 ) -> None:
     """
@@ -179,6 +180,9 @@ def print_raster(
 
     Multiple ``copies`` are sent in a **single** serial session (re-opening the
     port between jobs often results in only one physical label).
+
+    ``flush_before_close_s`` waits after the last job so the final label can
+    finish before the USB handle is closed (otherwise the last copy is often lost).
     """
     if width > 400:
         raise PrinterError("Image must be at most 400 pixels wide")
@@ -217,6 +221,12 @@ def print_raster(
             )
             if i + 1 < n_copies and inter_copy_delay_s > 0:
                 time.sleep(inter_copy_delay_s)
+        try:
+            s.flush()
+        except (OSError, AttributeError):
+            pass
+        if flush_before_close_s > 0:
+            time.sleep(flush_before_close_s)
     finally:
         s.close()
 
