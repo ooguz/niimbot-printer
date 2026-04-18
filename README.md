@@ -6,7 +6,7 @@
 
 Desktop app to print **labels** on a **NIIMBOT B1** over USB serial, using the same packet protocol as [hairymnstr/niimctl](https://github.com/hairymnstr/niimctl). Optional logging records each successful print.
 
-**Downloads:** GitHub **Releases** (after you push this repo) include Linux **AppImage** builds from CI when you tag a version (e.g. `v0.1.0`).
+**Downloads:** GitHub **Releases** include two Linux **AppImage** builds when you tag a version (e.g. `v0.2.0`): `NIIMBOT-Printer-<version>-<arch>.AppImage` (standalone, no Pretix) and `NIIMBOT-Printer-<version>-<arch>-pretix.AppImage` (with Pretix).
 
 ## Requirements
 
@@ -97,20 +97,17 @@ pyinstaller packaging/pyinstaller-minimal.spec
 # runnable: dist/niimbot-printer-minimal/niimbot-printer
 ```
 
-Wrap that folder as an AppImage (install `appimagetool` first):
+Wrap a bundle as an AppImage (install `appimagetool` first). Use a **plain** filename for the minimal bundle and **`APPIMAGE_VARIANT=pretix`** for the full bundle so local builds match release names:
 
 ```bash
 chmod +x packaging/build-appimage.sh
-./packaging/build-appimage.sh
+# After pyinstaller packaging/pyinstaller-minimal.spec:
+DIST_NAME=niimbot-printer-minimal ./packaging/build-appimage.sh
+# After pyinstaller packaging/pyinstaller.spec:
+APPIMAGE_VARIANT=pretix ./packaging/build-appimage.sh
 ```
 
-For the minimal PyInstaller output, set `DIST_NAME=niimbot-printer-minimal` and optionally `APPIMAGE_VARIANT=minimal` so the filename does not overwrite the full build:
-
-```bash
-DIST_NAME=niimbot-printer-minimal APPIMAGE_VARIANT=minimal ./packaging/build-appimage.sh
-```
-
-This produces `dist/NIIMBOT-Printer-<version>-<arch>.AppImage` (full) or `dist/NIIMBOT-Printer-<version>-<arch>-minimal.AppImage` when `APPIMAGE_VARIANT=minimal`, or leaves a ready-to-use `build/AppDir` if `appimagetool` is not installed.
+This produces `dist/NIIMBOT-Printer-<version>-<arch>.AppImage` (standalone) and `dist/NIIMBOT-Printer-<version>-<arch>-pretix.AppImage` (with Pretix), or leaves a ready-to-use `build/AppDir` if `appimagetool` is not installed.
 
 Release CI builds **both** AppImages when you push a version tag.
 
