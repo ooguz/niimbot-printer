@@ -33,6 +33,7 @@ jobs:
             libwebkit2gtk-4.0-37 \
             libwebkit2gtk-4.0-dev \
             libgstreamer-plugins-base1.0-dev \
+            libunwind-dev \
             libjpeg-dev \
             libpng-dev \
             libtiff-dev \
