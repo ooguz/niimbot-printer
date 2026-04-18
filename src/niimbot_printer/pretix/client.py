@@ -18,6 +18,10 @@ class PretixAPIError(Exception):
     """HTTP, network, or unexpected response errors."""
 
 
+def _api_root(base_url: str) -> str:
+    return base_url.strip().rstrip("/")
+
+
 @dataclass
 class RedeemResult:
     http_status: int
@@ -64,7 +68,22 @@ def _request_json(
         try:
             payload = json.loads(raw) if raw.strip() else {}
         except json.JSONDecodeError as je:
-            raise PretixAPIError(f"Pretix HTTP {e.code}: {raw[:500]}") from je
+            tip = ""
+            if (
+                e.code == 404
+                and "checkinlists" in url
+                and "/events/" not in url
+            ):
+                tip = (
+                    "\n\nThis URL is the old organizer-level check-in lists path, which "
+                    "returns 404 on current Pretix. Use a build that requests "
+                    "…/organizers/{org}/events/{event}/checkinlists/ — reinstall: "
+                    "pip install -e . from an updated repo, or use the full AppImage build."
+                )
+            raise PretixAPIError(
+                f"Pretix HTTP {e.code} for:\n{url}\n\n"
+                f"Response (truncated): {raw[:400]}{tip}"
+            ) from je
         return int(e.code), payload
     except URLError as e:
         raise PretixAPIError(str(e.reason if hasattr(e, "reason") else e)) from e
@@ -81,7 +100,8 @@ def redeem(
 ) -> RedeemResult:
     if not list_ids:
         raise PretixAPIError("At least one check-in list ID is required.")
-    url = f"{base_url.rstrip('/')}/api/v1/organizers/{organizer}/checkinrpc/redeem/"
+    org = quote(organizer.strip(), safe="")
+    url = f"{_api_root(base_url)}/api/v1/organizers/{org}/checkinrpc/redeem/"
     body: dict[str, Any] = {
         "secret": secret,
         "source_type": "barcode",
@@ -105,9 +125,7 @@ def fetch_checkin_lists(
         raise PretixAPIError("Event slug is required to load check-in lists.")
     org = quote(organizer.strip(), safe="")
     ev = quote(event_slug.strip(), safe="")
-    url = (
-        f"{base_url.rstrip('/')}/api/v1/organizers/{org}/events/{ev}/checkinlists/"
-    )
+    url = f"{_api_root(base_url)}/api/v1/organizers/{org}/events/{ev}/checkinlists/"
     status, payload = _request_json("GET", url, token, body=None)
     if status >= 400:
         hint = ""
