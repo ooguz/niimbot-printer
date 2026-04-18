@@ -91,6 +91,35 @@ def _expect_ok(
     return p
 
 
+def _drain_pending_packets(
+    port: serial.Serial,
+    debug: Callable[[str], None] | None,
+    *,
+    rounds: int = 24,
+    timeout: float = 0.06,
+) -> None:
+    """Consume framed replies until idle (clears multi-copy tail after 0xF3)."""
+    for _ in range(rounds):
+        p = recv_packet(port, timeout=timeout)
+        if p is None:
+            break
+        if debug:
+            debug(f"drain packet: {p!r}")
+
+
+def _drain_raw_rx(port: serial.Serial, chunk: int = 512, idle_timeout: float = 0.02) -> None:
+    """Discard any stray bytes not consumed by ``recv_packet``."""
+    old = port.timeout
+    try:
+        port.timeout = idle_timeout
+        while True:
+            b = port.read(chunk)
+            if not b:
+                break
+    finally:
+        port.timeout = old
+
+
 def _print_one_label_session(
     s: serial.Serial,
     width: int,
@@ -154,6 +183,13 @@ def _print_one_label_session(
         time.sleep(status_interval_s)
 
     send_packet(s, 0xF3, b"\x01")
+    # Read F3 reply and clear RX so the next copy's 0x01 is not confused with
+    # leftover frames (otherwise every second label is often skipped).
+    p = recv_packet(s, timeout=1.0)
+    if debug:
+        debug(f"after 0xf3: {p!r}")
+    _drain_pending_packets(s, debug, rounds=16, timeout=0.05)
+    _drain_raw_rx(s)
 
 
 def print_raster(
@@ -168,7 +204,7 @@ def print_raster(
     status_polls: int = 12,
     status_interval_s: float = 0.05,
     status_recv_timeout: float = 0.2,
-    inter_copy_delay_s: float = 0.25,
+    inter_copy_delay_s: float = 0.35,
     flush_before_close_s: float = 0.55,
     debug: Callable[[str], None] | None = None,
 ) -> None:
@@ -183,6 +219,9 @@ def print_raster(
 
     ``flush_before_close_s`` waits after the last job so the final label can
     finish before the USB handle is closed (otherwise the last copy is often lost).
+
+    Density and label type (0x21 / 0x23) are sent before **each** copy, and the line
+    is drained after each 0xF3 so the next job does not read stale packets.
     """
     if width > 400:
         raise PrinterError("Image must be at most 400 pixels wide")
@@ -202,13 +241,13 @@ def print_raster(
     s = serial.Serial(port_path)
 
     try:
-        send_packet(s, 0x21, bytes([density_b]))
-        _expect_ok(s, debug, "set density (0x21)")
-
-        send_packet(s, 0x23, bytes([label_type_b]))
-        _expect_ok(s, debug, "set label type (0x23)")
-
         for i in range(n_copies):
+            send_packet(s, 0x21, bytes([density_b]))
+            _expect_ok(s, debug, "set density (0x21)")
+
+            send_packet(s, 0x23, bytes([label_type_b]))
+            _expect_ok(s, debug, "set label type (0x23)")
+
             _print_one_label_session(
                 s,
                 width,
