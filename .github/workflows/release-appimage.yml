@@ -15,9 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # wxPython publishes manylinux wheels for 3.11; 3.12 often falls back to sdist and needs GTK -dev headers.
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Install system dependencies
         run: |
@@ -33,7 +34,9 @@ jobs:
             file
 
       - name: Install Python package and PyInstaller
-        run: pip install -e ".[dev]"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
 
       - name: Build PyInstaller bundle
         run: xvfb-run -a pyinstaller packaging/pyinstaller.spec
