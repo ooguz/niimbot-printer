@@ -74,6 +74,8 @@ The app can call your [Pretix](https://pretix.eu) instance’s [check-in redeem 
 
 **QR / barcode:** USB scanners in keyboard mode usually type the ticket secret into the **Ticket secret** field; press **Enter** or click **Check in and print label**. Camera-based decoding is not included in the default build.
 
+**“Load lists” returns HTTP 404 with an HTML “Not found” page:** Your Pretix server is almost certainly fine — that response is what the **obsolete** API path `/organizers/…/checkinlists/?event=…` returns. Update this app and reinstall (`pip install -e .` from the current tree) or use a freshly built **full** AppImage. The correct path is `/api/v1/organizers/{org}/events/{event}/checkinlists/` (see [check-in lists API](https://docs.pretix.eu/en/latest/api/resources/checkinlists.html)).
+
 **Standalone / minimal build:** `packaging/pyinstaller-minimal.spec` excludes the Pretix package so the frozen app stays smaller; the Pretix panel is hidden and the status line notes that Pretix is unavailable. Use the main `packaging/pyinstaller.spec` (or the full AppImage from releases) for Pretix support.
 
 ## Packaging (PyInstaller + AppImage)
