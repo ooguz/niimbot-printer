@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-__all__ = ["package_root", "bundled_bitter_font_path", "app_icon_path"]
+__all__ = ["package_root", "bundled_bitter_font_path", "app_icon_path", "gpl_license_full_text"]
 
 FONT_FILE = "bitter-v40-latin_latin-ext-600.ttf"
 ICON_FILE = "icon.png"
@@ -52,3 +52,28 @@ def app_icon_path() -> Path | None:
         if p.is_file():
             return p
     return None
+
+
+def gpl_license_full_text() -> str:
+    """Full GPLv3 text (``data/LICENSE`` in the package or PyInstaller bundle)."""
+    candidates: list[Path] = [
+        package_root() / "data" / "LICENSE",
+    ]
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        meipass = Path(getattr(sys, "_MEIPASS"))
+        candidates.extend(
+            [
+                meipass / "niimbot_printer" / "data" / "LICENSE",
+                meipass / "data" / "LICENSE",
+            ]
+        )
+    for p in candidates:
+        if p.is_file():
+            return p.read_text(encoding="utf-8", errors="replace")
+    dev = package_root().parent.parent / "LICENSE"
+    if dev.is_file():
+        return dev.read_text(encoding="utf-8", errors="replace")
+    return (
+        "GNU General Public License v3.0 or later.\n\n"
+        "Full text: https://www.gnu.org/licenses/gpl-3.0.html\n"
+    )

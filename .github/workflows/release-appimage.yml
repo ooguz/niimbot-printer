@@ -1,4 +1,4 @@
-# Build and attach a Linux AppImage to GitHub Releases when a version tag is pushed.
+# Build and attach a GNU/Linux AppImage to GitHub Releases when a version tag is pushed.
 name: Release AppImage
 
 on:
@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # wxPython ships Linux only as sdist on PyPI; the build needs GTK/WebKit -dev packages.
+      # wxPython ships GNU/Linux only as sdist on PyPI; the build needs GTK/WebKit -dev packages.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
