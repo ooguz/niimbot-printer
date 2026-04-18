@@ -91,6 +91,40 @@ def _expect_ok(
     return p
 
 
+def _is_busy_nak(p: tuple[int, bytes] | None) -> bool:
+    """True if the device is not ready (common 1-byte NAK)."""
+    if p is None:
+        return True
+    pl = p[1]
+    return pl == b"\x00" or pl == b""
+
+
+def _send_until_ack(
+    port: serial.Serial,
+    cmd: int,
+    payload: bytes,
+    label: str,
+    debug: Callable[[str], None] | None,
+    *,
+    recv_timeout: float = 0.45,
+    max_attempts: int = 80,
+    retry_delay_s: float = 0.12,
+) -> tuple[int, bytes]:
+    """
+    Retry command until we get a non-NAK reply. After 0xF3 the B1 often returns
+    ``b'\\x00'`` for 0x21/0x23/0x01 if queried too soon (still feeding/cutting).
+    """
+    for attempt in range(max_attempts):
+        send_packet(port, cmd, payload)
+        p = recv_packet(port, timeout=recv_timeout)
+        if debug:
+            debug(f"{label} attempt {attempt}: {p!r}")
+        if p is not None and not _is_busy_nak(p):
+            return p
+        time.sleep(retry_delay_s)
+    raise PrinterError(f"{label}: printer busy (NAK) after {max_attempts} attempts")
+
+
 def _drain_pending_packets(
     port: serial.Serial,
     debug: Callable[[str], None] | None,
@@ -132,14 +166,23 @@ def _print_one_label_session(
     status_recv_timeout: float,
 ) -> None:
     """One print job (0x01…0xF3) on an already-open port."""
-    send_packet(s, 0x01, struct.pack(">HIB", 1, 0, 0))
-    _expect_ok(s, debug, "print start (0x01)")
+    _send_until_ack(
+        s,
+        0x01,
+        struct.pack(">HIB", 1, 0, 0),
+        "print start (0x01)",
+        debug,
+    )
 
     send_packet(s, 0x03, b"\x01")
-    _expect_ok(s, debug, "page start (0x03)")
+    p = _expect_ok(s, debug, "page start (0x03)")
+    if _is_busy_nak(p):
+        raise PrinterError("page start (0x03): device returned NAK")
 
     send_packet(s, 0x13, struct.pack(">HHH", height, width, 1))
-    _expect_ok(s, debug, "set page size (0x13)")
+    p = _expect_ok(s, debug, "set page size (0x13)")
+    if _is_busy_nak(p):
+        raise PrinterError("set page size (0x13): device returned NAK")
 
     blank_rows = 0
     blank_start = -1
@@ -204,7 +247,7 @@ def print_raster(
     status_polls: int = 12,
     status_interval_s: float = 0.05,
     status_recv_timeout: float = 0.2,
-    inter_copy_delay_s: float = 0.35,
+    inter_copy_delay_s: float = 0.55,
     flush_before_close_s: float = 0.55,
     debug: Callable[[str], None] | None = None,
 ) -> None:
@@ -220,8 +263,9 @@ def print_raster(
     ``flush_before_close_s`` waits after the last job so the final label can
     finish before the USB handle is closed (otherwise the last copy is often lost).
 
-    Density and label type (0x21 / 0x23) are sent before **each** copy, and the line
-    is drained after each 0xF3 so the next job does not read stale packets.
+    Before each copy, 0x21 / 0x23 (and the session’s 0x01) are **retried** until the
+    printer returns a non-``\\x00`` ack — the B1 often NAKs if still busy right after 0xF3.
+    The line is drained after each 0xF3 so the next job does not read stale packets.
     """
     if width > 400:
         raise PrinterError("Image must be at most 400 pixels wide")
@@ -242,11 +286,20 @@ def print_raster(
 
     try:
         for i in range(n_copies):
-            send_packet(s, 0x21, bytes([density_b]))
-            _expect_ok(s, debug, "set density (0x21)")
-
-            send_packet(s, 0x23, bytes([label_type_b]))
-            _expect_ok(s, debug, "set label type (0x23)")
+            _send_until_ack(
+                s,
+                0x21,
+                bytes([density_b]),
+                "set density (0x21)",
+                debug,
+            )
+            _send_until_ack(
+                s,
+                0x23,
+                bytes([label_type_b]),
+                "set label type (0x23)",
+                debug,
+            )
 
             _print_one_label_session(
                 s,
