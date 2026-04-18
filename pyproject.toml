@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "niimbot-printer"
+version = "0.1.0"
+description = "Desktop label printing for NIIMBOT B1 over USB serial"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "wxPython>=4.2",
+    "Pillow>=10.0",
+    "pyserial>=3.5",
+]
+
+[project.scripts]
+niimbot-printer = "niimbot_printer.app:main"
+
+[project.optional-dependencies]
+dev = ["pyinstaller>=6.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+niimbot_printer = ["data/fonts/*", "data/icon.png"]

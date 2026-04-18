@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=NIIMBOT B1 printer
+Comment=Print labels on NIIMBOT B1
+Exec=niimbot-printer
+Icon=niimbot-printer
+Categories=Office;
+Terminal=false

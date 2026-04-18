@@ -1,0 +1,70 @@
+# Build and attach a Linux AppImage to GitHub Releases when a version tag is pushed.
+name: Release AppImage
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  appimage:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-0 \
+            libnotify4 \
+            libsdl2-2.0-0 \
+            libwebkit2gtk-4.0-37 \
+            libxtst6 \
+            xvfb \
+            libfuse2 \
+            file
+
+      - name: Install Python package and PyInstaller
+        run: pip install -e ".[dev]"
+
+      - name: Build PyInstaller bundle
+        run: xvfb-run -a pyinstaller packaging/pyinstaller.spec
+
+      - name: Install appimagetool
+        run: |
+          wget -q -O /tmp/appimagetool \
+            "https://github.com/AppImage/AppImageKit/releases/download/12/appimagetool-x86_64.AppImage"
+          chmod +x /tmp/appimagetool
+          sudo mv /tmp/appimagetool /usr/local/bin/appimagetool
+
+      - name: Build AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            export VERSION="${GITHUB_REF_NAME#v}"
+          else
+            export VERSION="0.0.0+${GITHUB_SHA:0:7}"
+          fi
+          ./packaging/build-appimage.sh
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: niimbot-printer-appimage
+          path: dist/*.AppImage
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.AppImage
+          generate_release_notes: true
