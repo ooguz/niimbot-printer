@@ -7,7 +7,7 @@ from pathlib import Path
 
 __all__ = ["package_root", "bundled_bitter_font_path", "app_icon_path"]
 
-FONT_FILE = "bitter-v40-latin-600.ttf"
+FONT_FILE = "bitter-v40-latin_latin-ext-600.ttf"
 ICON_FILE = "icon.png"
 
 
@@ -17,7 +17,7 @@ def package_root() -> Path:
 
 
 def bundled_bitter_font_path() -> Path | None:
-    """Bitter Latin 600 (SIL OFL 1.1). See ``data/fonts/OFL.txt``."""
+    """Bitter Latin Ext 600 (SIL OFL 1.1). See ``data/fonts/OFL.txt``."""
     candidates: list[Path] = [
         package_root() / "data" / "fonts" / FONT_FILE,
     ]

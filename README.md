@@ -40,8 +40,8 @@ If you used an older build, config may have lived under `~/.config/niimbot-welco
 
 ### Bundled font
 
-The default typeface is **Bitter** (Latin 600), bundled under `src/niimbot_printer/data/fonts/`.  
-Copyright 2011 The Bitter Project Authors (https://github.com/solmatas/Bitter).  
+The default typeface is **Bitter** (Latin Ext 600), bundled under `src/niimbot_printer/data/fonts/`.  
+Copyright (c) 2011-2020, Sol Matas (www.solmatas.com)
 Licensed under the **SIL Open Font License, Version 1.1** — see `src/niimbot_printer/data/fonts/OFL.txt`.
 
 You can override it in **Settings** with any TTF/OTF path.
