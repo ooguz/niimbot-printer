@@ -56,6 +56,26 @@ Each line is one JSON object, for example:
 
 The `name` field holds the printed text line. Logging is **on by default**; disable it in **File → Settings** if you do not want content written to disk.
 
+Successful **Pretix** prints set `source` to `"pretix"` and fill `pretix_event_slug`, `pretix_order_code`, and `pretix_position_id` when Pretix returns them.
+
+## Pretix check-in (optional)
+
+The app can call your [Pretix](https://pretix.eu) instance’s [check-in redeem API](https://docs.pretix.eu/en/latest/api/resources/checkin.html), check in a ticket from the scanned **secret**, then print a name badge. This is **off by default** and does not contact the network until you enable it in **Settings**.
+
+1. In Pretix (organizer settings), create an **API token** with permission to manage check-ins for your events.
+2. In **File → Settings**, under **Pretix (optional)**:
+   - Enable **Pretix check-in and badge printing**.
+   - **Pretix base URL** — HTTPS only, e.g. `https://kayit.oyd.org.tr` (no trailing path).
+   - **Organizer slug** — as in `https://…/org/<slug>/`.
+   - **API token** — or leave empty and set environment variable `PRETIX_API_TOKEN` or `PRETX_TOKEN` (env wins over the saved field).
+   - **Event slug** — used only by **Load lists** to query [check-in lists](https://docs.pretix.eu/en/latest/api/resources/checkinlists.html).
+   - **Check-in list ID(s)** — comma-separated integers for the list(s) you scan against (use **Load lists** or copy IDs from Pretix admin).
+   - **Badge text template** — Python `str.format` placeholders: `{attendee_name}`, `{company}`, `{order}`, `{item}`. Use a real newline in the field, or the two characters `\n` for a line break.
+
+**QR / barcode:** USB scanners in keyboard mode usually type the ticket secret into the **Ticket secret** field; press **Enter** or click **Check in and print label**. Camera-based decoding is not included in the default build.
+
+**Standalone / minimal build:** `packaging/pyinstaller-minimal.spec` excludes the Pretix package so the frozen app stays smaller; the Pretix panel is hidden and the status line notes that Pretix is unavailable. Use the main `packaging/pyinstaller.spec` (or the full AppImage from releases) for Pretix support.
+
 ## Packaging (PyInstaller + AppImage)
 
 Build a windowed binary folder with PyInstaller:
@@ -65,7 +85,14 @@ pip install -e ".[dev]"
 pyinstaller packaging/pyinstaller.spec
 ```
 
-The runnable is `dist/niimbot-printer/niimbot-printer`. The spec bundles the `data/fonts` directory for the default Bitter font.
+The runnable is `dist/niimbot-printer/niimbot-printer`. The spec bundles the `data/fonts` directory for the default Bitter font and includes **Pretix** integration.
+
+For a **smaller bundle without Pretix**:
+
+```bash
+pyinstaller packaging/pyinstaller-minimal.spec
+# runnable: dist/niimbot-printer-minimal/niimbot-printer
+```
 
 Wrap that folder as an AppImage (install `appimagetool` first):
 
@@ -74,7 +101,15 @@ chmod +x packaging/build-appimage.sh
 ./packaging/build-appimage.sh
 ```
 
-This produces `dist/NIIMBOT-Printer-<version>-<arch>.AppImage` when `appimagetool` is available, or leaves a ready-to-use `build/AppDir` if it is not.
+For the minimal PyInstaller output, set `DIST_NAME=niimbot-printer-minimal` and optionally `APPIMAGE_VARIANT=minimal` so the filename does not overwrite the full build:
+
+```bash
+DIST_NAME=niimbot-printer-minimal APPIMAGE_VARIANT=minimal ./packaging/build-appimage.sh
+```
+
+This produces `dist/NIIMBOT-Printer-<version>-<arch>.AppImage` (full) or `dist/NIIMBOT-Printer-<version>-<arch>-minimal.AppImage` when `APPIMAGE_VARIANT=minimal`, or leaves a ready-to-use `build/AppDir` if `appimagetool` is not installed.
+
+Release CI builds **both** AppImages when you push a version tag.
 
 For widest Linux compatibility, build on the **oldest** distro you intend to support (glibc on the build machine sets the floor).
 
@@ -85,6 +120,7 @@ For widest Linux compatibility, build on the **oldest** distro you intend to sup
 - **Label width / height** — default 384×240 pixels (width must be a multiple of 8).
 - **Density / label type** — match niimctl defaults (3 and 1); adjust if your media requires it.
 - **Logging** — toggle only; path is always `~/print.log` when enabled.
+- **Pretix** — optional; see [Pretix check-in (optional)](#pretix-check-in-optional). The API token is stored in `config.json`; restrict file permissions on shared machines or prefer env vars.
 
 ## License
 

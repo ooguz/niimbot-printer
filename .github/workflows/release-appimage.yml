@@ -48,7 +48,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Build PyInstaller bundle
+      - name: Build PyInstaller bundle (with Pretix)
         run: xvfb-run -a pyinstaller packaging/pyinstaller.spec
 
       - name: Install appimagetool
@@ -58,9 +58,27 @@ jobs:
           chmod +x /tmp/appimagetool
           sudo mv /tmp/appimagetool /usr/local/bin/appimagetool
 
-      - name: Build AppImage
+      - name: Build AppImage (full)
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
+          DIST_NAME: niimbot-printer
+          APPIMAGE_VARIANT: ""
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            export VERSION="${GITHUB_REF_NAME#v}"
+          else
+            export VERSION="0.0.0+${GITHUB_SHA:0:7}"
+          fi
+          ./packaging/build-appimage.sh
+
+      - name: Build PyInstaller bundle (minimal, no Pretix)
+        run: xvfb-run -a pyinstaller packaging/pyinstaller-minimal.spec
+
+      - name: Build AppImage (minimal)
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          DIST_NAME: niimbot-printer-minimal
+          APPIMAGE_VARIANT: minimal
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             export VERSION="${GITHUB_REF_NAME#v}"
