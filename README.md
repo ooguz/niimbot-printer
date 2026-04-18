@@ -122,7 +122,7 @@ For widest Linux compatibility, build on the **oldest** distro you intend to sup
 - **Font file** — optional; empty uses bundled Bitter. Bold prefers a `*-Bold.ttf` next to the chosen file or common system bold fonts.
 - **Label width / height** — default 384×240 pixels (width must be a multiple of 8).
 - **Density / label type** — match niimctl defaults (3 and 1); adjust if your media requires it.
-- **Labels per print** — how many identical labels to feed per print action (manual or Pretix); default 1.
+- **Labels per print** — how many identical labels to feed per print action (manual or Pretix); default 1. Jobs are sent in **one** USB serial session so the printer actually feeds multiple copies (opening a new connection per copy often only prints once).
 - **Logging** — toggle only; path is always `~/print.log` when enabled.
 - **Pretix** — optional; see [Pretix check-in (optional)](#pretix-check-in-optional). The API token is stored in `config.json`; restrict file permissions on shared machines or prefer env vars.
 
