@@ -73,6 +73,111 @@ def _set_frame_icon(frame: wx.Frame) -> None:
         frame.SetIcon(icon)
 
 
+def _print_label_copies(name: str, cfg: settings.AppSettings) -> None:
+    """Render once and send the same raster ``cfg.effective_label_copies()`` times."""
+    fp = cfg.effective_font_path()
+    copies = cfg.effective_label_copies()
+    im = renderer.render_name_label(
+        name,
+        cfg.label_width_px,
+        cfg.label_height_px,
+        font_path=fp,
+        font_size=cfg.font_size,
+        bold=cfg.bold,
+    )
+    w, h, rows = printer.image_to_rows(im)
+
+    def dbg(s: str) -> None:
+        print(s, flush=True)
+
+    dbg_fn = dbg if cfg.debug_serial else None
+    for _ in range(copies):
+        printer.print_raster(
+            cfg.serial_port,
+            w,
+            h,
+            rows,
+            density=cfg.density,
+            label_type=cfg.label_type,
+            debug=dbg_fn,
+        )
+
+
+class PretixLabelVerifyDialog(wx.Dialog):
+    """After Pretix check-in, let the operator confirm or edit text before printing."""
+
+    def __init__(self, parent: wx.Window, initial_text: str):
+        super().__init__(
+            parent,
+            title="Confirm Pretix label",
+            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+        )
+        root = wx.BoxSizer(wx.VERTICAL)
+        root.Add(
+            wx.StaticText(self, label="Check-in succeeded. Review the label text, then print."),
+            0,
+            wx.ALL,
+            8,
+        )
+        self._text = wx.TextCtrl(
+            self,
+            value=initial_text,
+            style=wx.TE_MULTILINE,
+            size=(440, 130),
+        )
+        self._text.SetEditable(False)
+        self._text.Bind(wx.EVT_KEY_DOWN, self._on_text_key)
+        root.Add(self._text, 1, wx.LEFT | wx.RIGHT | wx.EXPAND, 8)
+
+        hint = wx.StaticText(
+            self,
+            label=(
+                "While read-only: Enter prints. Click “Edit text” to change the text, "
+                "then “Print label” (or Enter when focus is on that button)."
+            ),
+        )
+        hint.Wrap(460)
+        root.Add(hint, 0, wx.ALL, 8)
+
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        btn_edit = wx.Button(self, label="Edit text")
+        btn_edit.Bind(wx.EVT_BUTTON, self._on_edit)
+        row.Add(btn_edit, 0, wx.RIGHT, 8)
+        row.AddStretchSpacer(1)
+        self._btn_print = wx.Button(self, wx.ID_OK, "Print label")
+        self._btn_print.SetDefault()
+        row.Add(self._btn_print, 0, wx.RIGHT, 8)
+        row.Add(wx.Button(self, wx.ID_CANCEL), 0)
+        root.Add(row, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 8)
+
+        self.SetSizer(root)
+        self.Fit()
+        self.SetSizeHints(500, -1)
+        self.Bind(wx.EVT_SHOW, self._on_show)
+        _set_frame_icon(self)
+
+    def _on_show(self, evt: wx.ShowEvent) -> None:
+        evt.Skip()
+        if evt.IsShown():
+            wx.CallAfter(self._btn_print.SetFocus)
+
+    def _on_edit(self, _evt: wx.CommandEvent) -> None:
+        self._text.SetEditable(True)
+        self._text.SetFocus()
+
+    def _on_text_key(self, evt: wx.KeyEvent) -> None:
+        if self._text.IsEditable():
+            evt.Skip()
+            return
+        if evt.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.EndModal(wx.ID_OK)
+        else:
+            evt.Skip()
+
+    def get_label_text(self) -> str:
+        return self._text.GetValue().strip()
+
+
 class SettingsDialog(wx.Dialog):
     def __init__(self, parent: wx.Window, cfg: settings.AppSettings):
         super().__init__(parent, title="Settings", style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
@@ -135,6 +240,15 @@ class SettingsDialog(wx.Dialog):
         grid.Add(wx.StaticText(self, label="Label type (1–3):"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.label_type = wx.SpinCtrl(self, min=1, max=3, initial=cfg.label_type)
         grid.Add(self.label_type, 0, wx.EXPAND)
+
+        grid.Add(wx.StaticText(self, label="Labels per print:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.label_copies = wx.SpinCtrl(
+            self,
+            min=1,
+            max=99,
+            initial=cfg.effective_label_copies(),
+        )
+        grid.Add(self.label_copies, 0, wx.EXPAND)
 
         grid.Add(wx.StaticText(self, label="Logging:"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.logging_on = wx.CheckBox(
@@ -199,6 +313,14 @@ class SettingsDialog(wx.Dialog):
         self.pretix_load_lists.Bind(wx.EVT_BUTTON, self._on_load_checkin_lists)
         list_row.Add(self.pretix_load_lists, 0, wx.LEFT, 6)
         pgrid.Add(list_row, 1, wx.EXPAND)
+
+        pgrid.Add(wx.StaticText(self, label=""), 0)
+        self.pretix_verify = wx.CheckBox(
+            self,
+            label="Show and verify each Pretix label before printing",
+        )
+        self.pretix_verify.SetValue(cfg.pretix_verify_before_print)
+        pgrid.Add(self.pretix_verify, 0, wx.EXPAND)
 
         pgrid.Add(wx.StaticText(self, label="Badge text template:"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.pretix_badge_tpl = wx.TextCtrl(self, value=cfg.pretix_badge_template)
@@ -376,6 +498,7 @@ class SettingsDialog(wx.Dialog):
             label_height_px=h,
             density=int(self.density.GetValue()),
             label_type=int(self.label_type.GetValue()),
+            label_copies=max(1, min(99, int(self.label_copies.GetValue()))),
             logging_enabled=self.logging_on.GetValue(),
             debug_serial=self.debug_serial.GetValue(),
             pretix_enabled=pretix_on,
@@ -385,6 +508,7 @@ class SettingsDialog(wx.Dialog):
             pretix_event_slug=self.pretix_event.GetValue().strip(),
             pretix_checkin_list_ids=list_ids,
             pretix_badge_template=self.pretix_badge_tpl.GetValue().strip() or "{attendee_name}",
+            pretix_verify_before_print=self.pretix_verify.GetValue(),
         )
         self.EndModal(wx.ID_OK)
 
@@ -605,29 +729,26 @@ class MainFrame(wx.Frame):
                 except (TypeError, ValueError):
                     pos_id = None
 
-                fp = cfg_snapshot.effective_font_path()
-                im = renderer.render_name_label(
-                    label,
-                    cfg_snapshot.label_width_px,
-                    cfg_snapshot.label_height_px,
-                    font_path=fp,
-                    font_size=cfg_snapshot.font_size,
-                    bold=cfg_snapshot.bold,
-                )
-                w, h, rows = printer.image_to_rows(im)
-
-                def dbg(s: str) -> None:
-                    print(s, flush=True)
-
-                printer.print_raster(
-                    cfg_snapshot.serial_port,
-                    w,
-                    h,
-                    rows,
-                    density=cfg_snapshot.density,
-                    label_type=cfg_snapshot.label_type,
-                    debug=dbg if cfg_snapshot.debug_serial else None,
-                )
+                meta = {
+                    "pretix_event_slug": ev_slug_s,
+                    "pretix_order_code": order_code,
+                    "pretix_position_id": pos_id,
+                }
+                if cfg_snapshot.pretix_verify_before_print:
+                    wx.CallAfter(self._on_pretix_verify_dialog, label, cfg_snapshot, meta)
+                else:
+                    _print_label_copies(label, cfg_snapshot)
+                    wx.CallAfter(
+                        self._on_print_finished,
+                        label,
+                        cfg_snapshot,
+                        None,
+                        source="pretix",
+                        pretix_event_slug=meta["pretix_event_slug"],
+                        pretix_order_code=meta["pretix_order_code"],
+                        pretix_position_id=meta["pretix_position_id"],
+                        clear_pretix_field=True,
+                    )
             except Exception as e:
                 wx.CallAfter(
                     self._on_print_finished,
@@ -635,16 +756,45 @@ class MainFrame(wx.Frame):
                     cfg_snapshot,
                     e,
                 )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_pretix_verify_dialog(
+        self,
+        label: str,
+        cfg_snapshot: settings.AppSettings,
+        meta: dict,
+    ) -> None:
+        self._set_busy(False)
+        dlg = PretixLabelVerifyDialog(self, label)
+        r = dlg.ShowModal()
+        final = dlg.get_label_text()
+        dlg.Destroy()
+        if r != wx.ID_OK:
+            self.pretix_secret_ctrl.SetFocus()
+            return
+        if not final:
+            wx.MessageBox("Label text is empty.", "Print", wx.OK | wx.ICON_INFORMATION)
+            self.pretix_secret_ctrl.SetFocus()
+            return
+
+        self._set_busy(True)
+
+        def worker() -> None:
+            try:
+                _print_label_copies(final, cfg_snapshot)
+            except Exception as e:
+                wx.CallAfter(self._on_print_finished, "", cfg_snapshot, e)
             else:
                 wx.CallAfter(
                     self._on_print_finished,
-                    label,
+                    final,
                     cfg_snapshot,
                     None,
                     source="pretix",
-                    pretix_event_slug=ev_slug_s,
-                    pretix_order_code=order_code,
-                    pretix_position_id=pos_id,
+                    pretix_event_slug=meta.get("pretix_event_slug"),
+                    pretix_order_code=meta.get("pretix_order_code"),
+                    pretix_position_id=meta.get("pretix_position_id"),
                     clear_pretix_field=True,
                 )
 
@@ -663,29 +813,7 @@ class MainFrame(wx.Frame):
 
         def worker() -> None:
             try:
-                fp = cfg_snapshot.effective_font_path()
-                im = renderer.render_name_label(
-                    name,
-                    cfg_snapshot.label_width_px,
-                    cfg_snapshot.label_height_px,
-                    font_path=fp,
-                    font_size=cfg_snapshot.font_size,
-                    bold=cfg_snapshot.bold,
-                )
-                w, h, rows = printer.image_to_rows(im)
-
-                def dbg(s: str) -> None:
-                    print(s, flush=True)
-
-                printer.print_raster(
-                    cfg_snapshot.serial_port,
-                    w,
-                    h,
-                    rows,
-                    density=cfg_snapshot.density,
-                    label_type=cfg_snapshot.label_type,
-                    debug=dbg if cfg_snapshot.debug_serial else None,
-                )
+                _print_label_copies(name, cfg_snapshot)
             except Exception as e:
                 wx.CallAfter(self._on_print_finished, name, cfg_snapshot, e)
             else:
@@ -734,6 +862,7 @@ class MainFrame(wx.Frame):
 
         if cfg.logging_enabled:
             try:
+                log_extra = {"label_copies": cfg.effective_label_copies()}
                 if source == "pretix":
                     audit_log.record_print(
                         cfg.effective_log_path(),
@@ -743,9 +872,16 @@ class MainFrame(wx.Frame):
                         pretix_event_slug=pretix_event_slug,
                         pretix_order_code=pretix_order_code,
                         pretix_position_id=pretix_position_id,
+                        extra=log_extra,
                     )
                 else:
-                    audit_log.record_print(cfg.effective_log_path(), name=name, seq=seq, source="manual")
+                    audit_log.record_print(
+                        cfg.effective_log_path(),
+                        name=name,
+                        seq=seq,
+                        source="manual",
+                        extra=log_extra,
+                    )
             except OSError as e:
                 wx.MessageBox(f"Printed OK but log write failed:\n{e}", "Log error", wx.OK | wx.ICON_WARNING)
 
