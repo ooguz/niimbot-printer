@@ -1,14 +1,20 @@
-![App icon](favicon.png) 
+<!-- markdownlint-disable MD033 MD041 -->
+![App icon](icon.png)
 
 # niimbot-printer
 
 ![GitHub Release](https://img.shields.io/github/v/release/ooguz/niimbot-printer) ![PyPI - Version](https://img.shields.io/pypi/v/niimbot-printer) [![Release AppImage](https://github.com/ooguz/niimbot-printer/actions/workflows/release-appimage.yml/badge.svg)](https://github.com/ooguz/niimbot-printer/actions/workflows/release-appimage.yml) <a href="https://www.buymeacoffee.com/ooguz" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 20px !important;width: 85px !important;" ></a>
 
-Desktop app to print **labels** on a **NIIMBOT B1** over USB serial. Optional logging records each successful print. 
+Desktop app to print **labels** on a **NIIMBOT B1** over USB serial. Optional logging records each successful print.
 
 The app can also integrate with [Pretix](https://pretix.eu) to check-in and print badges, see the section below.
 
 **TLDR Downloads:** GitHub **Releases** include two GNU/Linux **AppImage** builds: `NIIMBOT-Printer-<version>-<arch>.AppImage` (standalone, no Pretix support) and `NIIMBOT-Printer-<version>-<arch>-pretix.AppImage` (with Pretix support).
+
+## Screenshots
+
+![Main window](assets/screenshot_main_screen.png)
+![Settings](assets/screenshot_settings_screen.png)
 
 ## Requirements
 
@@ -43,7 +49,7 @@ If you used an older build, config may have lived under `~/.config/niimbot-welco
 ### Bundled font
 
 The default typeface is **Bitter** (Latin Ext 600), bundled under `src/niimbot_printer/data/fonts/`.  
-Copyright (c) 2011-2020, Sol Matas (www.solmatas.com)
+Copyright (c) 2011-2020, Sol Matas [www.solmatas.com](https://www.solmatas.com)
 Licensed under the **SIL Open Font License, Version 1.1** — see `src/niimbot_printer/data/fonts/OFL.txt`.
 
 You can override it in **Settings** with any TTF/OTF path.
